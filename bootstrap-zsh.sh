@@ -352,7 +352,7 @@ fi
 ok "containers & k8s tooling step complete (see warnings above for anything skipped)"
 
 # ---------------------------------------------------------------------------
-log "10/12  Fullstack & Linux power tools (jq, yq, gh, tmux, git-delta, xh, overmind, tldr)"
+log "10/12  Fullstack & Linux power tools (jq, yq, gh, tmux, git-delta, xh, overmind, tldr, claude, cursor-agent)"
 case "$PKG_MGR" in
   brew)
     brew install -q jq tmux gh yq git-delta xh overmind tlrc >/dev/null 2>&1 \
@@ -397,6 +397,24 @@ if [ "$PKG_MGR" != "brew" ]; then
       echo "  !! could not resolve overmind download URL, skipping" >&2
     fi
   fi
+fi
+
+# Claude Code (Anthropic's terminal coding agent) — official installer,
+# auto-detects OS/arch itself (Linux + macOS), no sudo, non-interactive,
+# lands at ~/.local/bin/claude which our PATH already covers.
+if ! command -v claude >/dev/null 2>&1; then
+  curl -fsSL https://claude.ai/install.sh | bash >/dev/null 2>&1 \
+    || echo "  !! Claude Code installer failed, skipping (install manually: https://claude.ai/install.sh)" >&2
+fi
+
+# Cursor CLI (cursor-agent) — official installer, same shape as above:
+# auto-detects OS/arch, no sudo, non-interactive. Symlinks land at
+# ~/.local/bin/agent and ~/.local/bin/cursor-agent (both point to the same
+# binary; we guard on the more specific 'cursor-agent' name since a bare
+# 'agent' is generic enough that something else could already occupy it).
+if ! command -v cursor-agent >/dev/null 2>&1; then
+  curl -fsSL https://cursor.com/install | bash >/dev/null 2>&1 \
+    || echo "  !! Cursor CLI installer failed, skipping (install manually: https://cursor.com/install)" >&2
 fi
 
 # Wire up delta as git's diff pager if it installed successfully — additive

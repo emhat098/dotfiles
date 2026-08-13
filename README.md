@@ -62,6 +62,9 @@ warning and the script keeps going rather than aborting):**
   automatically), `xh` (terminal HTTP client), `overmind` (Procfile-based
   multi-process runner — handy for running several microservices locally),
   `tldr` via the official `tlrc` client
+- AI coding agents: Claude Code (`claude`) and Cursor CLI (`cursor-agent`,
+  also symlinked as `agent`) — both via their official installers, which
+  self-detect OS/arch and install to `~/.local/bin`
 
 **Wrap-up (steps 11-12):**
 - Writes `~/.zshrc` (backs up any existing one first)
