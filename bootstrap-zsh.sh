@@ -62,14 +62,19 @@ ARCH="$(uname -m)"      # x86_64 | aarch64 (Linux) | arm64 (macOS)
 # Homebrew instead, so it doesn't need any of these.
 if [ "$OS_NAME" = "Linux" ]; then
   case "$ARCH" in
-    x86_64)  GNU_ARCH="x86_64-unknown-linux-gnu"; MUSL_ARCH="x86_64-unknown-linux-musl"; LG_ARCH="x86_64"; AMD64_ARCH="amd64"; MONGOSH_ARCH="x64" ;;
-    aarch64) GNU_ARCH="aarch64-unknown-linux-gnu"; MUSL_ARCH="aarch64-unknown-linux-musl"; LG_ARCH="arm64"; AMD64_ARCH="arm64"; MONGOSH_ARCH="arm64" ;;
+    x86_64)  GNU_ARCH="x86_64-unknown-linux-gnu"; MUSL_ARCH="x86_64-unknown-linux-musl"; LG_ARCH="x86_64"; AMD64_ARCH="amd64"; MONGOSH_ARCH="x64"; AWS_ZIP_ARCH="x86_64" ;;
+    aarch64) GNU_ARCH="aarch64-unknown-linux-gnu"; MUSL_ARCH="aarch64-unknown-linux-musl"; LG_ARCH="arm64"; AMD64_ARCH="arm64"; MONGOSH_ARCH="arm64"; AWS_ZIP_ARCH="aarch64" ;;
     *) echo "Unsupported Linux arch: $ARCH" >&2; exit 1 ;;
   esac
 elif [ "$OS_NAME" != "Darwin" ]; then
   echo "Unsupported OS: $OS_NAME (only Linux and macOS are supported)" >&2
   exit 1
 fi
+
+# kubectl's dl.k8s.io release layout needs OS/arch tokens on *both* Linux and
+# macOS (unlike the Linux-only vars above), so compute these unconditionally.
+K8S_OS="linux"; [ "$OS_NAME" = "Darwin" ] && K8S_OS="darwin"
+K8S_ARCH="amd64"; { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && K8S_ARCH="arm64"
 
 # Single source of truth for which package manager step 1 (and the test
 # suite) will use — computed once here instead of re-detected inline.
@@ -91,7 +96,7 @@ fi
 # tests/test-bootstrap.sh exercise every OS/arch/package-manager branch
 # safely by mocking `uname` and the package-manager binaries on PATH.
 if [ "${BOOTSTRAP_SELF_TEST:-0}" = "1" ]; then
-  echo "OS_NAME=$OS_NAME ARCH=$ARCH PKG_MGR=$PKG_MGR GNU_ARCH=${GNU_ARCH:-} MUSL_ARCH=${MUSL_ARCH:-} LG_ARCH=${LG_ARCH:-} AMD64_ARCH=${AMD64_ARCH:-} MONGOSH_ARCH=${MONGOSH_ARCH:-}"
+  echo "OS_NAME=$OS_NAME ARCH=$ARCH PKG_MGR=$PKG_MGR GNU_ARCH=${GNU_ARCH:-} MUSL_ARCH=${MUSL_ARCH:-} LG_ARCH=${LG_ARCH:-} AMD64_ARCH=${AMD64_ARCH:-} MONGOSH_ARCH=${MONGOSH_ARCH:-} AWS_ZIP_ARCH=${AWS_ZIP_ARCH:-} K8S_OS=$K8S_OS K8S_ARCH=$K8S_ARCH"
   exit 0
 fi
 
@@ -254,7 +259,6 @@ if ! command -v aws >/dev/null 2>&1; then
   if [ "$OS_NAME" = "Darwin" ]; then
     brew install -q awscli >/dev/null 2>&1 || brew install awscli
   else
-    AWS_ZIP_ARCH="x86_64"; [ "$ARCH" = "aarch64" ] && AWS_ZIP_ARCH="aarch64"
     AWS_WORK=$(mktemp -d)
     if curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ZIP_ARCH}.zip" -o "$AWS_WORK/awscliv2.zip"; then
       unzip -q "$AWS_WORK/awscliv2.zip" -d "$AWS_WORK"
@@ -303,10 +307,9 @@ else
   fi
 fi
 
-# kubectl — official binary, arch/OS-aware, no package manager needed
+# kubectl — official binary, arch/OS-aware (K8S_OS/K8S_ARCH computed once up
+# top alongside the other detection vars), no package manager needed
 if ! command -v kubectl >/dev/null 2>&1; then
-  K8S_OS="linux"; [ "$OS_NAME" = "Darwin" ] && K8S_OS="darwin"
-  K8S_ARCH="amd64"; { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; } && K8S_ARCH="arm64"
   K8S_STABLE=$(curl -sSL https://dl.k8s.io/release/stable.txt 2>/dev/null)
   if [ -n "$K8S_STABLE" ] && curl -sSL "https://dl.k8s.io/release/${K8S_STABLE}/bin/${K8S_OS}/${K8S_ARCH}/kubectl" -o "$HOME/.local/bin/kubectl"; then
     chmod +x "$HOME/.local/bin/kubectl"

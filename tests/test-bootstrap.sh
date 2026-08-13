@@ -113,10 +113,10 @@ fi
 echo
 echo "== 2. OS / arch / package-manager detection matrix =="
 run_case "ubuntu-x86_64 (apt)"      Linux  x86_64  "apt-get" \
-  "PKG_MGR=apt .*GNU_ARCH=x86_64-unknown-linux-gnu .*MUSL_ARCH=x86_64-unknown-linux-musl .*LG_ARCH=x86_64 AMD64_ARCH=amd64 MONGOSH_ARCH=x64"
+  "PKG_MGR=apt .*GNU_ARCH=x86_64-unknown-linux-gnu .*MUSL_ARCH=x86_64-unknown-linux-musl .*LG_ARCH=x86_64 AMD64_ARCH=amd64 MONGOSH_ARCH=x64 AWS_ZIP_ARCH=x86_64 K8S_OS=linux K8S_ARCH=amd64"
 
 run_case "ubuntu-aarch64 (apt)"     Linux  aarch64 "apt-get" \
-  "PKG_MGR=apt .*GNU_ARCH=aarch64-unknown-linux-gnu .*MUSL_ARCH=aarch64-unknown-linux-musl .*LG_ARCH=arm64 AMD64_ARCH=arm64 MONGOSH_ARCH=arm64"
+  "PKG_MGR=apt .*GNU_ARCH=aarch64-unknown-linux-gnu .*MUSL_ARCH=aarch64-unknown-linux-musl .*LG_ARCH=arm64 AMD64_ARCH=arm64 MONGOSH_ARCH=arm64 AWS_ZIP_ARCH=aarch64 K8S_OS=linux K8S_ARCH=arm64"
 
 run_case "fedora-x86_64 (dnf)"      Linux  x86_64  "dnf" \
   "PKG_MGR=dnf"
@@ -127,11 +127,15 @@ run_case "arch-aarch64 (pacman)"    Linux  aarch64 "pacman" \
 run_case "opensuse-x86_64 (zypper)" Linux  x86_64  "zypper" \
   "PKG_MGR=zypper"
 
+# K8S_OS/K8S_ARCH must resolve correctly for macOS too (unlike GNU_ARCH/
+# AWS_ZIP_ARCH/etc., which are Linux-only) — this is exactly the shape of
+# bug that shipped once already (an arch mapping silently missing the
+# macOS/arm64 case), so assert it explicitly rather than just tolerating it.
 run_case "macos-arm64 (brew)"       Darwin arm64   "brew" \
-  "OS_NAME=Darwin ARCH=arm64 PKG_MGR=brew GNU_ARCH= MUSL_ARCH= LG_ARCH="
+  "OS_NAME=Darwin ARCH=arm64 PKG_MGR=brew GNU_ARCH= MUSL_ARCH= LG_ARCH= AMD64_ARCH= MONGOSH_ARCH= AWS_ZIP_ARCH= K8S_OS=darwin K8S_ARCH=arm64"
 
 run_case "macos-x86_64 (brew)"      Darwin x86_64  "brew" \
-  "OS_NAME=Darwin ARCH=x86_64 PKG_MGR=brew"
+  "OS_NAME=Darwin ARCH=x86_64 PKG_MGR=brew .*K8S_OS=darwin K8S_ARCH=amd64"
 
 run_case "macos never needs a Linux pkg mgr even if one is on PATH" \
   Darwin arm64 "apt-get" "PKG_MGR=brew"
