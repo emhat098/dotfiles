@@ -2,7 +2,7 @@
 
 Personal shell setup: oh-my-zsh + plugins + Powerlevel10k + modern CLI tools,
 plus a Node/NestJS/TypeScript + Postgres/MongoDB/Valkey + AWS/GCP +
-Docker/Kubernetes dev toolchain.
+Docker/Kubernetes + general Linux/fullstack power-tool toolchain.
 
 Supports Linux (Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE) and macOS.
 
@@ -34,7 +34,8 @@ First shell launch runs the Powerlevel10k config wizard. Rerun it anytime with
 - Oh My Zsh (unattended)
 - Plugins: zsh-autosuggestions, zsh-syntax-highlighting, zsh-completions,
   you-should-use, fzf-tab, git-open + built-ins (git, nvm, npm, node, docker,
-  docker-compose, kubectl, helm, aws, sudo, extract, command-not-found, fzf)
+  docker-compose, kubectl, helm, aws, gh, tmux, sudo, extract,
+  command-not-found, fzf)
 - Theme: Powerlevel10k
 - fzf, zoxide, direnv — official installers, which already auto-detect
   Linux/macOS and arch themselves (installed to `~/.fzf` / `~/.local/bin`,
@@ -44,10 +45,11 @@ First shell launch runs the Powerlevel10k config wizard. Rerun it anytime with
     `~/.local/bin`, arch-aware (`x86_64`/`aarch64`), no sudo
   - macOS — via Homebrew
 
-**Dev toolchain (steps 6-9 — best-effort: a failed package/download prints a
+**Dev toolchain (steps 6-10 — best-effort: a failed package/download prints a
 warning and the script keeps going rather than aborting):**
 - Node.js via nvm (installs nvm itself, then the latest LTS), plus
-  `@nestjs/cli`, `typescript`, `ts-node` installed globally
+  `@nestjs/cli`, `typescript`, `ts-node` installed globally, and `corepack
+  enable` for `pnpm`/`yarn` (ships with Node, just needs enabling)
 - DB clients: `psql` (postgresql-client), `mongosh` (official binary,
   arch-aware), `redis-cli` (works against Valkey directly — protocol
   compatible; a `valkey-cli` alias is added too)
@@ -55,8 +57,13 @@ warning and the script keeps going rather than aborting):**
 - Containers & Kubernetes: Docker (engine on Linux via each distro's
   official method; macOS gets a manual Docker Desktop reminder since it's a
   GUI app), `kubectl`, `k9s`, `kubectx`/`kubens`, `helm`
+- Fullstack & Linux power tools: `jq` + `yq` (JSON/YAML processors), `gh`
+  (GitHub CLI), `tmux`, `git-delta` (wired up as git's diff pager
+  automatically), `xh` (terminal HTTP client), `overmind` (Procfile-based
+  multi-process runner — handy for running several microservices locally),
+  `tldr` via the official `tlrc` client
 
-**Wrap-up (steps 10-11):**
+**Wrap-up (steps 11-12):**
 - Writes `~/.zshrc` (backs up any existing one first)
 - Sets zsh as your default shell
 

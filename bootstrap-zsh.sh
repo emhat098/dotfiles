@@ -4,7 +4,7 @@
 #
 # Covers both terminal UX (oh-my-zsh, plugins, Powerlevel10k, fzf/zoxide/
 # direnv, modern CLI tools) and a Node/TS/Nest + Postgres/Mongo/Valkey +
-# AWS/GCP + Docker/K8s dev toolchain.
+# AWS/GCP + Docker/K8s + jq/yq/gh/tmux/delta/xh/overmind/tldr dev toolchain.
 #
 # Usage (on a brand new WSL distro / VM / container / Mac):
 #   curl -fsSL https://raw.githubusercontent.com/emhat098/dotfiles/main/bootstrap-zsh.sh | bash
@@ -13,7 +13,7 @@
 #
 # Safe to re-run: every step checks for existing state first (git pull instead
 # of re-clone, skip if binary already on PATH, .zshrc backed up before
-# overwrite). Steps 6-9 (dev toolchain) are best-effort: an individual
+# overwrite). Steps 6-10 (dev toolchain) are best-effort: an individual
 # package/download failure prints a warning and the script continues rather
 # than aborting, since a stale package name on one distro shouldn't block
 # everything else from installing.
@@ -104,7 +104,7 @@ CUSTOM="$HOME/.oh-my-zsh/custom"
 mkdir -p "$HOME/.local/bin"
 
 # ---------------------------------------------------------------------------
-log "1/11  System packages (zsh, git, curl)"
+log "1/12  System packages (zsh, git, curl)"
 case "$PKG_MGR" in
   brew)
     if ! command -v brew >/dev/null 2>&1; then
@@ -139,7 +139,7 @@ esac
 ok "base packages present"
 
 # ---------------------------------------------------------------------------
-log "2/11  Oh My Zsh"
+log "2/12  Oh My Zsh"
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
   RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   ok "installed"
@@ -148,7 +148,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-log "3/11  Zsh plugins + Powerlevel10k theme"
+log "3/12  Zsh plugins + Powerlevel10k theme"
 clone_or_pull() {
   local repo="$1" dest="$2"
   if [ -d "$dest" ]; then
@@ -167,7 +167,7 @@ clone_or_pull https://github.com/romkatv/powerlevel10k               "$CUSTOM/th
 ok "plugins ready"
 
 # ---------------------------------------------------------------------------
-log "4/11  fzf / zoxide / direnv"
+log "4/12  fzf / zoxide / direnv"
 # These three ship official install scripts that already auto-detect
 # Linux vs macOS and the right arch — no branching needed here.
 if [ ! -d "$HOME/.fzf" ]; then
@@ -179,7 +179,7 @@ command -v direnv >/dev/null 2>&1 || curl -sfL https://direnv.net/install.sh | b
 ok "fzf $(~/.fzf/bin/fzf --version 2>/dev/null | awk '{print $1}'), zoxide, direnv ready"
 
 # ---------------------------------------------------------------------------
-log "5/11  Modern CLI tools (bat, fd, eza, ripgrep, lazygit, glow)"
+log "5/12  Modern CLI tools (bat, fd, eza, ripgrep, lazygit, glow)"
 if [ "$OS_NAME" = "Darwin" ]; then
   # Homebrew publishes darwin builds of all six directly — simpler and more
   # reliable than chasing per-arch GitHub release asset names on macOS.
@@ -195,7 +195,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-log "6/11  Node.js (via nvm) + NestJS/TypeScript tooling"
+log "6/12  Node.js (via nvm) + NestJS/TypeScript tooling"
 export NVM_DIR="$HOME/.nvm"
 if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   NVM_TAG=$(curl -sS https://api.github.com/repos/nvm-sh/nvm/releases/latest 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"(v[0-9.]+)".*/\1/')
@@ -214,13 +214,19 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
     npm install -g @nestjs/cli typescript ts-node >/dev/null 2>&1 \
       || echo "  !! failed to install @nestjs/cli/typescript/ts-node globally (run 'npm i -g @nestjs/cli typescript ts-node' yourself later)" >&2
   fi
-  ok "node $(node --version 2>/dev/null || echo '?'), nest CLI + typescript ready"
+  # corepack ships with Node 16.9+ and manages pnpm/yarn without a separate
+  # global install — just needs enabling once.
+  if command -v corepack >/dev/null 2>&1; then
+    corepack enable >/dev/null 2>&1 \
+      || echo "  !! corepack enable failed, skipping (run 'corepack enable' yourself for pnpm/yarn)" >&2
+  fi
+  ok "node $(node --version 2>/dev/null || echo '?'), nest CLI + typescript ready, corepack (pnpm/yarn) enabled"
 else
   echo "  !! nvm not available, skipping Node/Nest tooling" >&2
 fi
 
 # ---------------------------------------------------------------------------
-log "7/11  Database clients (psql, mongosh, redis/valkey-cli)"
+log "7/12  Database clients (psql, mongosh, redis/valkey-cli)"
 case "$PKG_MGR" in
   brew)
     brew install -q libpq redis >/dev/null 2>&1 || brew install libpq redis
@@ -254,7 +260,7 @@ ok "database client step complete (psql, mongosh, redis-cli — see warnings abo
 echo "  (valkey speaks the Redis protocol — redis-cli works against it directly; a 'valkey-cli' alias is added to .zshrc)"
 
 # ---------------------------------------------------------------------------
-log "8/11  Cloud CLIs (AWS, Google Cloud)"
+log "8/12  Cloud CLIs (AWS, Google Cloud)"
 if ! command -v aws >/dev/null 2>&1; then
   if [ "$OS_NAME" = "Darwin" ]; then
     brew install -q awscli >/dev/null 2>&1 || brew install awscli
@@ -279,7 +285,7 @@ fi
 ok "AWS CLI $(aws --version 2>&1 | awk '{print $1}' || echo 'skipped'), Google Cloud SDK step complete"
 
 # ---------------------------------------------------------------------------
-log "9/11  Containers & Kubernetes (Docker, kubectl, k9s, kubectx/kubens, helm)"
+log "9/12  Containers & Kubernetes (Docker, kubectl, k9s, kubectx/kubens, helm)"
 
 if [ "$OS_NAME" = "Darwin" ]; then
   if [ ! -d "/Applications/Docker.app" ] && ! command -v docker >/dev/null 2>&1; then
@@ -346,7 +352,65 @@ fi
 ok "containers & k8s tooling step complete (see warnings above for anything skipped)"
 
 # ---------------------------------------------------------------------------
-log "10/11  Writing ~/.zshrc"
+log "10/12  Fullstack & Linux power tools (jq, yq, gh, tmux, git-delta, xh, overmind, tldr)"
+case "$PKG_MGR" in
+  brew)
+    brew install -q jq tmux gh yq git-delta xh overmind tlrc >/dev/null 2>&1 \
+      || brew install jq tmux gh yq git-delta xh overmind tlrc
+    ;;
+  apt)
+    sudo apt-get install -y -qq jq tmux >/dev/null 2>&1 \
+      || echo "  !! apt install of jq/tmux failed, skipping" >&2
+    ;;
+  dnf)
+    sudo dnf install -y -q jq tmux >/dev/null 2>&1 \
+      || echo "  !! dnf install of jq/tmux failed, skipping" >&2
+    ;;
+  pacman)
+    sudo pacman -S --noconfirm --needed jq tmux >/dev/null 2>&1 \
+      || echo "  !! pacman install of jq/tmux failed, skipping" >&2
+    ;;
+  zypper)
+    sudo zypper --non-interactive install jq tmux >/dev/null 2>&1 \
+      || echo "  !! zypper install of jq/tmux failed, skipping" >&2
+    ;;
+esac
+
+if [ "$PKG_MGR" != "brew" ]; then
+  # yq's tarball keeps the arch-suffixed filename (yq_linux_amd64) rather
+  # than a plain "yq", unlike every other tool here — pass that as innerbin.
+  install_release_bin mikefarah/yq     "linux_${AMD64_ARCH}\.tar\.gz\$" "yq_linux_${AMD64_ARCH}" yq
+  install_release_bin dandavison/delta "${GNU_ARCH}\.tar\.gz\$"          delta                    delta
+  install_release_bin ducaale/xh       "${MUSL_ARCH}\.tar\.gz\$"         xh                       xh
+  install_release_bin cli/cli          "linux_${AMD64_ARCH}\.tar\.gz\$"  gh                       gh
+  install_release_bin tldr-pages/tlrc  "${GNU_ARCH}\.tar\.gz\$"          tldr                     tldr
+
+  # overmind's Linux releases are plain gzip (a single compressed binary),
+  # not a tar archive, so it can't go through install_release_bin as-is.
+  if ! command -v overmind >/dev/null 2>&1; then
+    OVERMIND_URL=$(get_url DarthSim/overmind "linux-${AMD64_ARCH}\.gz\$")
+    if [ -n "$OVERMIND_URL" ]; then
+      curl -sSL "$OVERMIND_URL" 2>/dev/null | gunzip > "$HOME/.local/bin/overmind" \
+        && chmod +x "$HOME/.local/bin/overmind" \
+        || echo "  !! overmind download/extract failed, skipping" >&2
+    else
+      echo "  !! could not resolve overmind download URL, skipping" >&2
+    fi
+  fi
+fi
+
+# Wire up delta as git's diff pager if it installed successfully — additive
+# config keys only, won't touch user.name/user.email or anything existing.
+if command -v delta >/dev/null 2>&1; then
+  git config --global core.pager delta 2>/dev/null || true
+  git config --global interactive.diffFilter "delta --color-only" 2>/dev/null || true
+  git config --global delta.navigate true 2>/dev/null || true
+  git config --global merge.conflictstyle diff3 2>/dev/null || true
+fi
+ok "power tools step complete (see warnings above for anything skipped)"
+
+# ---------------------------------------------------------------------------
+log "11/12  Writing ~/.zshrc"
 if [ -f "$HOME/.zshrc" ]; then
   cp "$HOME/.zshrc" "$HOME/.zshrc.bak.$(date +%Y%m%d%H%M%S 2>/dev/null || echo backup)"
 fi
@@ -381,6 +445,8 @@ plugins=(
   kubectl
   helm
   aws
+  gh
+  tmux
   sudo
   extract
   command-not-found
@@ -441,7 +507,7 @@ ZSHRC
 ok "~/.zshrc written (previous one backed up if it existed)"
 
 # ---------------------------------------------------------------------------
-log "11/11  Default shell"
+log "12/12  Default shell"
 if [ "$(basename "${SHELL:-}")" != "zsh" ]; then
   chsh -s "$(command -v zsh)" || echo "  (run 'chsh -s \$(command -v zsh)' yourself if this failed non-interactively)"
 fi
