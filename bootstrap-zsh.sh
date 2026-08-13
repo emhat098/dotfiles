@@ -521,6 +521,16 @@ alias lg='lazygit'
 alias valkey-cli='redis-cli'
 # Note: `fd` and `rg` are left as their own commands (not aliased over
 # find/grep) since their syntax differs — just use `fd <pattern>` / `rg <pattern>` directly.
+
+# docker-compose (legacy hyphenated v1 syntax): apt/dnf/zypper installs of
+# Docker only bring the newer `docker compose` (space) plugin, not this
+# standalone binary — this is Docker's own documented fix for that gap.
+# Checked at shell-startup time (not install time) and skipped if a real
+# docker-compose binary is already present, so distros that ship the actual
+# standalone binary (e.g. Arch, via pacman) keep using it untouched.
+if ! command -v docker-compose >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+  alias docker-compose='docker compose'
+fi
 ZSHRC
 ok "~/.zshrc written (previous one backed up if it existed)"
 

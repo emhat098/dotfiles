@@ -56,7 +56,12 @@ warning and the script keeps going rather than aborting):**
 - Cloud CLIs: AWS CLI v2, Google Cloud SDK (`gcloud`)
 - Containers & Kubernetes: Docker (engine on Linux via each distro's
   official method; macOS gets a manual Docker Desktop reminder since it's a
-  GUI app), `kubectl`, `k9s`, `kubectx`/`kubens`, `helm`
+  GUI app), `kubectl`, `k9s`, `kubectx`/`kubens`, `helm`. A `docker-compose`
+  (hyphenated, legacy v1 syntax) alias to `docker compose` is added in
+  `.zshrc` — apt/dnf/zypper Docker installs only ship the newer space-syntax
+  plugin, and this is Docker's own documented fix for that gap. The alias is
+  skipped if a real standalone `docker-compose` binary is already present
+  (e.g. Arch's `pacman` install), so it never overrides a working one.
 - Fullstack & Linux power tools: `jq` + `yq` (JSON/YAML processors), `gh`
   (GitHub CLI), `tmux`, `git-delta` (wired up as git's diff pager
   automatically), `xh` (terminal HTTP client), `overmind` (Procfile-based
