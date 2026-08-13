@@ -1,7 +1,8 @@
 # dotfiles
 
-Personal shell setup: oh-my-zsh + plugins + Powerlevel10k + modern CLI tools
-(fzf, zoxide, direnv, bat, eza, fd, ripgrep, lazygit).
+Personal shell setup: oh-my-zsh + plugins + Powerlevel10k + modern CLI tools,
+plus a Node/NestJS/TypeScript + Postgres/MongoDB/Valkey + AWS/GCP +
+Docker/Kubernetes dev toolchain.
 
 Supports Linux (Debian/Ubuntu, Fedora/RHEL, Arch, openSUSE) and macOS.
 
@@ -25,28 +26,48 @@ First shell launch runs the Powerlevel10k config wizard. Rerun it anytime with
 
 ## What it installs
 
+**Terminal / shell UX (steps 1-5):**
 - Base packages (zsh, git, curl):
   - Linux — via whichever package manager is found: `apt-get`, `dnf`,
     `pacman`, or `zypper`
   - macOS — via Homebrew (installed automatically if missing)
 - Oh My Zsh (unattended)
 - Plugins: zsh-autosuggestions, zsh-syntax-highlighting, zsh-completions,
-  you-should-use, fzf-tab, git-open + built-ins (git, nvm, npm, node, sudo,
-  extract, command-not-found, fzf)
+  you-should-use, fzf-tab, git-open + built-ins (git, nvm, npm, node, docker,
+  docker-compose, kubectl, helm, aws, sudo, extract, command-not-found, fzf)
 - Theme: Powerlevel10k
 - fzf, zoxide, direnv — official installers, which already auto-detect
   Linux/macOS and arch themselves (installed to `~/.fzf` / `~/.local/bin`,
   no sudo)
-- bat, eza, fd, ripgrep, lazygit:
+- bat, eza, fd, ripgrep, lazygit, glow (Markdown renderer):
   - Linux — static binaries pulled straight from GitHub releases into
     `~/.local/bin`, arch-aware (`x86_64`/`aarch64`), no sudo
   - macOS — via Homebrew
+
+**Dev toolchain (steps 6-9 — best-effort: a failed package/download prints a
+warning and the script keeps going rather than aborting):**
+- Node.js via nvm (installs nvm itself, then the latest LTS), plus
+  `@nestjs/cli`, `typescript`, `ts-node` installed globally
+- DB clients: `psql` (postgresql-client), `mongosh` (official binary,
+  arch-aware), `redis-cli` (works against Valkey directly — protocol
+  compatible; a `valkey-cli` alias is added too)
+- Cloud CLIs: AWS CLI v2, Google Cloud SDK (`gcloud`)
+- Containers & Kubernetes: Docker (engine on Linux via each distro's
+  official method; macOS gets a manual Docker Desktop reminder since it's a
+  GUI app), `kubectl`, `k9s`, `kubectx`/`kubens`, `helm`
+
+**Wrap-up (steps 10-11):**
 - Writes `~/.zshrc` (backs up any existing one first)
 - Sets zsh as your default shell
 
 Safe to re-run — every step checks existing state first (git pull instead of
 re-clone, skips already-installed binaries, backs up `.zshrc` before
 overwriting).
+
+After it finishes: `aws configure` / `gcloud init` to authenticate the cloud
+CLIs, `docker login` as needed. If Docker was freshly installed on Linux,
+log out/in (or run `newgrp docker`) for the new `docker` group membership to
+take effect without sudo.
 
 ## Important: Nerd Font for icons
 

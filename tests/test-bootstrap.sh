@@ -113,10 +113,10 @@ fi
 echo
 echo "== 2. OS / arch / package-manager detection matrix =="
 run_case "ubuntu-x86_64 (apt)"      Linux  x86_64  "apt-get" \
-  "PKG_MGR=apt .*GNU_ARCH=x86_64-unknown-linux-gnu .*MUSL_ARCH=x86_64-unknown-linux-musl .*LG_ARCH=x86_64"
+  "PKG_MGR=apt .*GNU_ARCH=x86_64-unknown-linux-gnu .*MUSL_ARCH=x86_64-unknown-linux-musl .*LG_ARCH=x86_64 AMD64_ARCH=amd64 MONGOSH_ARCH=x64"
 
 run_case "ubuntu-aarch64 (apt)"     Linux  aarch64 "apt-get" \
-  "PKG_MGR=apt .*GNU_ARCH=aarch64-unknown-linux-gnu .*MUSL_ARCH=aarch64-unknown-linux-musl .*LG_ARCH=arm64"
+  "PKG_MGR=apt .*GNU_ARCH=aarch64-unknown-linux-gnu .*MUSL_ARCH=aarch64-unknown-linux-musl .*LG_ARCH=arm64 AMD64_ARCH=arm64 MONGOSH_ARCH=arm64"
 
 run_case "fedora-x86_64 (dnf)"      Linux  x86_64  "dnf" \
   "PKG_MGR=dnf"
