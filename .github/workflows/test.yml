@@ -1,0 +1,135 @@
+name: test
+
+# Runs the actual installs, not just the detection-logic unit tests — every
+# job here executes real bootstrap-zsh.sh steps on a real platform. Triggers
+# on push/PR (so regressions are caught before merge) and weekly (so
+# upstream drift — a renamed Homebrew formula, a changed GitHub release
+# asset convention — gets caught even with zero new commits).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'  # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -x bootstrap-zsh.sh tests/test-bootstrap.sh tests/verify-install.sh
+
+  unit-tests:
+    # Detection-logic matrix only — no sudo, no network installs. Fast, so
+    # it gates the (much slower) real end-to-end jobs below.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tests/test-bootstrap.sh
+
+  e2e-ubuntu:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bootstrap-zsh.sh end-to-end
+        run: ./bootstrap-zsh.sh
+      - name: Verify installed tools
+        run: ./tests/verify-install.sh
+
+  e2e-macos:
+    needs: unit-tests
+    runs-on: macos-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bootstrap-zsh.sh end-to-end
+        run: ./bootstrap-zsh.sh
+      - name: Verify installed tools
+        run: ./tests/verify-install.sh
+
+  # Fedora/Arch/openSUSE aren't available as native GH-hosted runners, so
+  # these run inside official containers on the ubuntu-latest host. Minimal
+  # distro images run as root with no sudo and no regular user by default —
+  # the script assumes a non-root user invoking sudo, so each job sets that
+  # up first, matching how a real person's machine actually looks.
+  e2e-fedora:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # git must exist *before* actions/checkout runs (it shells out to git
+      # itself) — minimal distro images don't ship it, so this has to be a
+      # separate step ahead of checkout, not folded into the user-setup step
+      # below like it might look like it could be.
+      - name: Install git (required by actions/checkout)
+        run: dnf install -y -q git >/dev/null
+      - uses: actions/checkout@v4
+      - name: Set up sudo + non-root user
+        run: |
+          dnf install -y -q sudo >/dev/null
+          useradd -m -s /bin/bash tester
+          echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Run bootstrap-zsh.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Verify installed tools
+        run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"
+
+  e2e-arch:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Install git (required by actions/checkout)
+        run: pacman -Sy --noconfirm --needed git >/dev/null
+      - uses: actions/checkout@v4
+      - name: Set up sudo + non-root user
+        run: |
+          pacman -S --noconfirm --needed sudo >/dev/null
+          useradd -m -s /bin/bash tester
+          echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Run bootstrap-zsh.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Verify installed tools
+        run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"
+
+  e2e-opensuse:
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    container:
+      image: opensuse/tumbleweed:latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Install git (required by actions/checkout)
+        run: zypper --non-interactive install git >/dev/null
+      - uses: actions/checkout@v4
+      - name: Set up sudo + non-root user
+        run: |
+          zypper --non-interactive install sudo >/dev/null
+          useradd -m -s /bin/bash tester
+          echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Run bootstrap-zsh.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Verify installed tools
+        run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"

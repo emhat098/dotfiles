@@ -27,15 +27,34 @@ ok()   { printf '\033[1;32m  ->\033[0m %s\n' "$1"; }
 # step 5) so steps 5, 7, and 9 can all reuse them for GitHub-release-tarball
 # installs on Linux (macOS uses Homebrew instead throughout).
 get_url() { # $1 = owner/repo   $2 = grep pattern for asset filename
-  curl -sS "https://api.github.com/repos/$1/releases/latest" \
+  # Unauthenticated GitHub API calls are capped at 60/hour per IP — fine
+  # for a one-off local run, but this script does ~13 of these calls and
+  # CI runs it on 5 platforms in parallel from a shared runner IP range, so
+  # authenticate when a token's available (CI sets GITHUB_TOKEN; harmless
+  # no-op locally where it usually isn't set).
+  local auth=()
+  [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl -sS "${auth[@]}" "https://api.github.com/repos/$1/releases/latest" \
     | grep -o '"browser_download_url": *"[^"]*"' \
     | sed -E 's/.*"(https[^"]+)"/\1/' \
     | grep -iE "$2" | head -1
 }
 
-install_release_bin() { # $1 owner/repo  $2 asset-regex  $3 binary-name-inside-tarball  $4 install-name
-  local repo="$1" pattern="$2" innerbin="$3" outname="$4"
-  command -v "$outname" >/dev/null 2>&1 && { ok "$outname already installed"; return; }
+install_release_bin() { # $1 owner/repo  $2 asset-regex  $3 binary-name-inside-tarball  $4 install-name  $5 optional: identity substring to grep for in `$outname --version`
+  local repo="$1" pattern="$2" innerbin="$3" outname="$4" identity="${5:-}"
+  if command -v "$outname" >/dev/null 2>&1; then
+    # `command -v` only checks the name resolves to *something* — it can't
+    # tell a same-named-but-different tool (e.g. Python's kislyuk/yq vs this
+    # script's Go mikefarah/yq) from the real thing. When an identity marker
+    # is given, verify it actually matches instead of silently trusting the
+    # name; warn loudly rather than silently skip if it doesn't.
+    if [ -n "$identity" ] && ! "$outname" --version 2>&1 | grep -qi "$identity"; then
+      echo "  !! $outname is already on PATH but its version output doesn't mention '$identity' — this looks like a different '$outname' than expected (not overwriting it). Check '$outname --version' yourself if this causes issues." >&2
+    else
+      ok "$outname already installed"
+    fi
+    return
+  fi
   local url; url=$(get_url "$repo" "$pattern")
   [ -z "$url" ] && { echo "  !! could not resolve download URL for $repo, skipping" >&2; return; }
   local work; work=$(mktemp -d)
@@ -103,6 +122,22 @@ fi
 CUSTOM="$HOME/.oh-my-zsh/custom"
 mkdir -p "$HOME/.local/bin"
 
+# Prime sudo once upfront instead of prompting for a password at each of the
+# ~15 separate sudo call sites scattered across steps 1/7/8/9/10 — a real
+# run has long curl downloads in between them, so without this the cached
+# credential can expire and re-prompt mid-run anyway. Only relevant on
+# Linux (macOS/Homebrew never shells out to sudo in this script) and only
+# when there's an actual package manager to use it (PKG_MGR=none means step
+# 1 is about to exit 1 regardless, so skip prompting for nothing).
+if [ "$OS_NAME" = "Linux" ] && [ "$PKG_MGR" != "none" ]; then
+  sudo -v
+  # Keep the credential alive for the whole script run in the background;
+  # dies with this script (checks kill -0 on our PID) rather than lingering.
+  ( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) 2>/dev/null &
+  SUDO_KEEPALIVE_PID=$!
+  trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+fi
+
 # ---------------------------------------------------------------------------
 log "1/12  System packages (zsh, git, curl)"
 case "$PKG_MGR" in
@@ -120,16 +155,16 @@ case "$PKG_MGR" in
     ;;
   apt)
     sudo apt-get update -qq
-    sudo apt-get install -y -qq zsh git curl fontconfig unzip tar ca-certificates >/dev/null
+    sudo apt-get install -y -qq zsh git curl fontconfig unzip tar ca-certificates which openssl >/dev/null
     ;;
   dnf)
-    sudo dnf install -y -q zsh git curl fontconfig unzip tar ca-certificates >/dev/null
+    sudo dnf install -y -q zsh git curl fontconfig unzip tar ca-certificates which openssl >/dev/null
     ;;
   pacman)
-    sudo pacman -Sy --noconfirm --needed zsh git curl fontconfig unzip tar ca-certificates >/dev/null
+    sudo pacman -Sy --noconfirm --needed zsh git curl fontconfig unzip tar ca-certificates which openssl >/dev/null
     ;;
   zypper)
-    sudo zypper --non-interactive install zsh git curl fontconfig unzip tar ca-certificates >/dev/null
+    sudo zypper --non-interactive install zsh git curl fontconfig unzip tar ca-certificates which openssl >/dev/null
     ;;
   *)
     echo "No supported package manager found (apt-get/dnf/pacman/zypper). Install zsh git curl fontconfig manually, then re-run." >&2
@@ -198,29 +233,57 @@ fi
 log "6/12  Node.js (via nvm) + NestJS/TypeScript tooling"
 export NVM_DIR="$HOME/.nvm"
 if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-  NVM_TAG=$(curl -sS https://api.github.com/repos/nvm-sh/nvm/releases/latest 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"(v[0-9.]+)".*/\1/')
+  NVM_AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && NVM_AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  NVM_TAG=$(curl -sS "${NVM_AUTH[@]}" https://api.github.com/repos/nvm-sh/nvm/releases/latest 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | sed -E 's/.*"(v[0-9.]+)".*/\1/')
   [ -z "$NVM_TAG" ] && NVM_TAG="v0.40.6"
   curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_TAG}/install.sh" 2>/dev/null | bash >/dev/null 2>&1 \
     || echo "  !! nvm install script failed, skipping Node/Nest tooling (install nvm yourself: https://github.com/nvm-sh/nvm)" >&2
 fi
 if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # nvm.sh is not nounset-clean: `nvm use` dereferences unset variables, which
+  # under this script's `set -u` doesn't just fail that command — it kills the
+  # whole shell (exit 127), taking steps 7-12 down with it, and `|| true` can't
+  # catch it. Relax -u for the nvm calls only, then restore it.
+  set +u
   # shellcheck disable=SC1091
   \. "$NVM_DIR/nvm.sh"
-  if ! command -v node >/dev/null 2>&1; then
-    nvm install --lts >/dev/null 2>&1 && nvm alias default 'lts/*' >/dev/null 2>&1 \
-      || echo "  !! nvm could not install a Node LTS release, skipping" >&2
-  fi
+  # -b downloads the prebuilt binary for this platform and never falls back to
+  # compiling from source (nvm's default fallback needs a full C++ toolchain
+  # and takes ~30 min on a fresh box). Older nvm builds predate -b, hence the
+  # plain retry. Run unconditionally rather than gating on `command -v node`:
+  # nvm install is idempotent, and a distro-packaged node on PATH must not
+  # win here or the global installs below land in a root-owned prefix.
+  nvm install -b --lts >/dev/null 2>&1 || nvm install --lts >/dev/null 2>&1 \
+    || echo "  !! nvm could not install a Node LTS release, skipping" >&2
+  nvm alias default 'lts/*' >/dev/null 2>&1 || true
+  # Activate it for the rest of this step so `npm i -g` writes into
+  # $NVM_DIR/versions/node/<ver>/lib/node_modules, not /usr/lib.
+  nvm use --lts >/dev/null 2>&1 || true
+  set -u
   if command -v npm >/dev/null 2>&1; then
     npm install -g @nestjs/cli typescript ts-node >/dev/null 2>&1 \
       || echo "  !! failed to install @nestjs/cli/typescript/ts-node globally (run 'npm i -g @nestjs/cli typescript ts-node' yourself later)" >&2
+    # yarn/pnpm come from npm rather than `corepack enable`: corepack only
+    # drops lazy shims that fetch the real package manager on first use (and
+    # can refuse when a project pins a different `packageManager`), while it
+    # is itself still flagged experimental. npm globals are real binaries,
+    # available offline, and upgradeable with the same `npm i -g` everything
+    # else here uses. Note they live under the active Node version, so a
+    # later `nvm install` of a new major needs this step re-run (or
+    # `nvm reinstall-packages <old-version>`).
+    # Earlier versions of this script ran `corepack enable`, which leaves
+    # corepack-owned yarn/pnpm shims in the very bin dir npm wants to write —
+    # npm refuses to clobber files it doesn't own and the install dies with
+    # EEXIST, silently leaving the old shims behind. `corepack disable`
+    # removes only the shims corepack itself created, so it is safe to run
+    # unconditionally and is a no-op on a machine that never enabled it.
+    command -v corepack >/dev/null 2>&1 && corepack disable >/dev/null 2>&1 || true
+    npm install -g yarn pnpm >/dev/null 2>&1 \
+      || echo "  !! failed to install yarn/pnpm globally (run 'npm i -g yarn pnpm' yourself later)" >&2
+  else
+    echo "  !! npm not on PATH after nvm install, skipping global Node packages" >&2
   fi
-  # corepack ships with Node 16.9+ and manages pnpm/yarn without a separate
-  # global install — just needs enabling once.
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable >/dev/null 2>&1 \
-      || echo "  !! corepack enable failed, skipping (run 'corepack enable' yourself for pnpm/yarn)" >&2
-  fi
-  ok "node $(node --version 2>/dev/null || echo '?'), nest CLI + typescript ready, corepack (pnpm/yarn) enabled"
+  ok "node $(node --version 2>/dev/null || echo '?'), nest CLI + typescript, yarn $(yarn --version 2>/dev/null || echo '?') / pnpm $(pnpm --version 2>/dev/null || echo '?')"
 else
   echo "  !! nvm not available, skipping Node/Nest tooling" >&2
 fi
@@ -304,11 +367,15 @@ else
         ;;
     esac
     if command -v docker >/dev/null 2>&1; then
-      sudo usermod -aG docker "$USER" 2>/dev/null || true
+      # $USER isn't guaranteed to be set (e.g. under `set -u` in a
+      # container/CI shell with no login manager) — fall back to `id -un`,
+      # which always works.
+      CURRENT_USER="${USER:-$(id -un)}"
+      sudo usermod -aG docker "$CURRENT_USER" 2>/dev/null || true
       if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
         sudo systemctl enable --now docker >/dev/null 2>&1 || true
       fi
-      echo "  (added $USER to the 'docker' group — log out/in, or run 'newgrp docker', for it to take effect without sudo)"
+      echo "  (added $CURRENT_USER to the 'docker' group — log out/in, or run 'newgrp docker', for it to take effect without sudo)"
     fi
   fi
 fi
@@ -379,7 +446,9 @@ esac
 if [ "$PKG_MGR" != "brew" ]; then
   # yq's tarball keeps the arch-suffixed filename (yq_linux_amd64) rather
   # than a plain "yq", unlike every other tool here — pass that as innerbin.
-  install_release_bin mikefarah/yq     "linux_${AMD64_ARCH}\.tar\.gz\$" "yq_linux_${AMD64_ARCH}" yq
+  # identity check: guards against the well-known Python kislyuk/yq (a
+  # completely different, incompatible CLI) already occupying the name.
+  install_release_bin mikefarah/yq     "linux_${AMD64_ARCH}\.tar\.gz\$" "yq_linux_${AMD64_ARCH}" yq mikefarah
   install_release_bin dandavison/delta "${GNU_ARCH}\.tar\.gz\$"          delta                    delta
   install_release_bin ducaale/xh       "${MUSL_ARCH}\.tar\.gz\$"         xh                       xh
   install_release_bin cli/cli          "linux_${AMD64_ARCH}\.tar\.gz\$"  gh                       gh
@@ -429,8 +498,27 @@ ok "power tools step complete (see warnings above for anything skipped)"
 
 # ---------------------------------------------------------------------------
 log "11/12  Writing ~/.zshrc"
+PREV_ZSHRC_EXISTED=0
 if [ -f "$HOME/.zshrc" ]; then
-  cp "$HOME/.zshrc" "$HOME/.zshrc.bak.$(date +%Y%m%d%H%M%S 2>/dev/null || echo backup)"
+  PREV_ZSHRC_EXISTED=1
+  ZSHRC_BACKUP="$HOME/.zshrc.bak.$(date +%Y%m%d%H%M%S 2>/dev/null || echo backup)"
+  cp "$HOME/.zshrc" "$ZSHRC_BACKUP"
+fi
+
+# ~/.zshrc.local: this script fully overwrites ~/.zshrc every run (that's
+# what makes re-runs reproducible), so anything hand-added directly to
+# ~/.zshrc — API tokens, personal aliases, machine-specific exports — gets
+# silently dropped on the next run. Created once here (never touched again
+# after) and sourced at the very end of the generated ~/.zshrc below, so
+# custom additions go here instead and survive every future re-run.
+if [ ! -f "$HOME/.zshrc.local" ]; then
+  cat > "$HOME/.zshrc.local" <<'ZSHRC_LOCAL'
+# Personal additions that should survive bootstrap-zsh.sh re-runs go here —
+# it's sourced from ~/.zshrc but never written to by the script itself.
+# Examples: API tokens/exports, machine-specific PATH tweaks, personal aliases.
+#
+#   export GITHUB_ACCESS_TOKEN=...
+ZSHRC_LOCAL
 fi
 
 cat > "$HOME/.zshrc" <<'ZSHRC'
@@ -531,8 +619,20 @@ alias valkey-cli='redis-cli'
 if ! command -v docker-compose >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
   alias docker-compose='docker compose'
 fi
+
+# Personal additions (tokens, custom aliases, machine-specific exports) live
+# in ~/.zshrc.local, which this script creates once and never overwrites —
+# see the comment header in that file. Sourced last so it can override
+# anything set above if needed.
+[ -f ~/.zshrc.local ] && source ~/.zshrc.local
 ZSHRC
+# shellcheck disable=SC2088 # intentional literal '~' for a human-readable path in the message, not expansion
 ok "~/.zshrc written (previous one backed up if it existed)"
+if [ "$PREV_ZSHRC_EXISTED" -eq 1 ]; then
+  echo "  (~/.zshrc.local created for personal additions that survive future re-runs —"
+  echo "   if your previous ~/.zshrc had custom lines like API tokens, check"
+  echo "   $ZSHRC_BACKUP and move them into ~/.zshrc.local)"
+fi
 
 # ---------------------------------------------------------------------------
 log "12/12  Default shell"
