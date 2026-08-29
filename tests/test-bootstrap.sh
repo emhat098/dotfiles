@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 # tests/test-bootstrap.sh — exercise every OS / arch / package-manager branch
-# of ../bootstrap-zsh.sh without touching the real system: no sudo, no
-# network installs, no file writes outside a scratch dir.
+# of ../bootstrap-linux.sh and ../bootstrap-macos.sh without touching the
+# real system: no sudo, no network installs, no file writes outside a
+# scratch dir.
 #
-# How it works: bootstrap-zsh.sh has a BOOTSTRAP_SELF_TEST=1 hook that prints
-# its OS/ARCH/PKG_MGR detection result and exits before doing anything real.
-# For each case we run the real script under `env -i` (a completely empty
-# environment) with only a fake PATH containing the `uname`/package-manager
-# shims that case should see — so the host's real apt-get etc. can never
-# leak in and produce a false pass.
+# How it works: both scripts have a BOOTSTRAP_SELF_TEST=1 hook that prints
+# their OS/ARCH/PKG_MGR detection result and exits before doing anything
+# real. For each case we run the real script under `env -i` (a completely
+# empty environment) with only a fake PATH containing the `uname`/
+# package-manager shims that case should see — so the host's real apt-get
+# etc. can never leak in and produce a false pass.
 #
 # Usage: ./tests/test-bootstrap.sh
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BOOTSTRAP="$SCRIPT_DIR/../bootstrap-zsh.sh"
+REPO_DIR="$SCRIPT_DIR/.."
+LINUX_BOOTSTRAP="$REPO_DIR/bootstrap-linux.sh"
+MACOS_BOOTSTRAP="$REPO_DIR/bootstrap-macos.sh"
+COMMON="$REPO_DIR/bootstrap-common.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -51,18 +55,19 @@ EOF
   chmod +x "$1/uname"
 }
 
-# run_case: $1=name $2=uname-s $3=uname-m $4="space separated fake pkg-mgr
-# binaries" $5=expected-regex-against-stdout $6="fail" to instead assert a
-# non-zero exit (used for the OS/arch guard clauses, which fire *before* the
-# self-test hook and therefore always exit non-zero regardless of the flag).
+# run_case: $1=name $2=bootstrap-script $3=uname-s $4=uname-m $5="space
+# separated fake pkg-mgr binaries" $6=expected-regex-against-stdout
+# $7="fail" to instead assert a non-zero exit (used for the OS/arch guard
+# clauses, which fire *before* the self-test hook and therefore always exit
+# non-zero regardless of the flag).
 run_case() {
-  local name="$1" os="$2" arch="$3" mgrs="$4" expect="$5" mode="${6:-pass}"
+  local name="$1" script="$2" os="$3" arch="$4" mgrs="$5" expect="$6" mode="${7:-pass}"
   local dir; dir="$(fake_bin_dir "$name")"
   add_fake_uname "$dir" "$os" "$arch"
   for m in $mgrs; do add_fake "$dir" "$m"; done
 
   local out status
-  out="$(env -i PATH="$dir" BOOTSTRAP_SELF_TEST=1 "$BASH_BIN" "$BOOTSTRAP" 2>&1)"
+  out="$(env -i PATH="$dir" BOOTSTRAP_SELF_TEST=1 "$BASH_BIN" "$script" 2>&1)"
   status=$?
 
   if [ "$mode" = "fail" ]; then
@@ -86,19 +91,22 @@ run_case() {
 }
 
 echo "== 1. Syntax check =="
-if bash -n "$BOOTSTRAP"; then
-  echo "PASS: bash -n"
-  PASS=$((PASS+1))
-else
-  echo "FAIL: bash -n reported a syntax error"
-  FAIL=$((FAIL+1))
-fi
+for f in "$COMMON" "$LINUX_BOOTSTRAP" "$MACOS_BOOTSTRAP"; do
+  if bash -n "$f"; then
+    echo "PASS: bash -n $(basename "$f")"
+    PASS=$((PASS+1))
+  else
+    echo "FAIL: bash -n reported a syntax error in $(basename "$f")"
+    FAIL=$((FAIL+1))
+  fi
+done
 
 if command -v zsh >/dev/null 2>&1; then
-  # The generated ~/.zshrc lives inside a 'cat > ... <<ZSHRC ... ZSHRC' heredoc.
-  # Extract it and syntax-check it on its own with zsh -n.
+  # The generated ~/.zshrc lives inside a 'cat > ... <<ZSHRC ... ZSHRC' heredoc
+  # in bootstrap-common.sh. Extract it and syntax-check it on its own with
+  # zsh -n.
   ZSHRC_TMP="$WORK/generated.zshrc"
-  awk '/^cat > "\$HOME\/\.zshrc" <<.ZSHRC.$/{flag=1; next} /^ZSHRC$/{flag=0} flag' "$BOOTSTRAP" > "$ZSHRC_TMP"
+  awk '/^  cat > "\$HOME\/\.zshrc" <<.ZSHRC.$/{flag=1; next} /^ZSHRC$/{flag=0} flag' "$COMMON" > "$ZSHRC_TMP"
   if [ -s "$ZSHRC_TMP" ] && zsh -n "$ZSHRC_TMP"; then
     echo "PASS: zsh -n on generated .zshrc"
     PASS=$((PASS+1))
@@ -111,51 +119,59 @@ else
 fi
 
 echo
-echo "== 2. OS / arch / package-manager detection matrix =="
-run_case "ubuntu-x86_64 (apt)"      Linux  x86_64  "apt-get" \
+echo "== 2. bootstrap-linux.sh: OS / arch / package-manager detection matrix =="
+run_case "ubuntu-x86_64 (apt)"      "$LINUX_BOOTSTRAP" Linux  x86_64  "apt-get" \
   "PKG_MGR=apt .*GNU_ARCH=x86_64-unknown-linux-gnu .*MUSL_ARCH=x86_64-unknown-linux-musl .*LG_ARCH=x86_64 AMD64_ARCH=amd64 MONGOSH_ARCH=x64 AWS_ZIP_ARCH=x86_64 K8S_OS=linux K8S_ARCH=amd64"
 
-run_case "ubuntu-aarch64 (apt)"     Linux  aarch64 "apt-get" \
+run_case "ubuntu-aarch64 (apt)"     "$LINUX_BOOTSTRAP" Linux  aarch64 "apt-get" \
   "PKG_MGR=apt .*GNU_ARCH=aarch64-unknown-linux-gnu .*MUSL_ARCH=aarch64-unknown-linux-musl .*LG_ARCH=arm64 AMD64_ARCH=arm64 MONGOSH_ARCH=arm64 AWS_ZIP_ARCH=aarch64 K8S_OS=linux K8S_ARCH=arm64"
 
-run_case "fedora-x86_64 (dnf)"      Linux  x86_64  "dnf" \
+run_case "fedora-x86_64 (dnf)"      "$LINUX_BOOTSTRAP" Linux  x86_64  "dnf" \
   "PKG_MGR=dnf"
 
-run_case "arch-aarch64 (pacman)"    Linux  aarch64 "pacman" \
+run_case "arch-aarch64 (pacman)"    "$LINUX_BOOTSTRAP" Linux  aarch64 "pacman" \
   "PKG_MGR=pacman .*LG_ARCH=arm64"
 
-run_case "opensuse-x86_64 (zypper)" Linux  x86_64  "zypper" \
+run_case "opensuse-x86_64 (zypper)" "$LINUX_BOOTSTRAP" Linux  x86_64  "zypper" \
   "PKG_MGR=zypper"
-
-# K8S_OS/K8S_ARCH must resolve correctly for macOS too (unlike GNU_ARCH/
-# AWS_ZIP_ARCH/etc., which are Linux-only) — this is exactly the shape of
-# bug that shipped once already (an arch mapping silently missing the
-# macOS/arm64 case), so assert it explicitly rather than just tolerating it.
-run_case "macos-arm64 (brew)"       Darwin arm64   "brew" \
-  "OS_NAME=Darwin ARCH=arm64 PKG_MGR=brew GNU_ARCH= MUSL_ARCH= LG_ARCH= AMD64_ARCH= MONGOSH_ARCH= AWS_ZIP_ARCH= K8S_OS=darwin K8S_ARCH=arm64"
-
-run_case "macos-x86_64 (brew)"      Darwin x86_64  "brew" \
-  "OS_NAME=Darwin ARCH=x86_64 PKG_MGR=brew .*K8S_OS=darwin K8S_ARCH=amd64"
-
-run_case "macos never needs a Linux pkg mgr even if one is on PATH" \
-  Darwin arm64 "apt-get" "PKG_MGR=brew"
 
 # Package-manager precedence: if multiple happen to be on PATH, apt wins
 # (matches the if/elif order in the script).
-run_case "apt takes precedence over dnf when both present" Linux x86_64 "apt-get dnf" \
+run_case "apt takes precedence over dnf when both present" "$LINUX_BOOTSTRAP" Linux x86_64 "apt-get dnf" \
   "PKG_MGR=apt"
 
 # No known package manager on PATH -> detection correctly settles on "none".
 # (This is the exact condition that makes step 1's real case statement hit
 # its `*) exit 1` arm; the self-test hook intentionally returns before step 1
 # runs, so we assert the detection input to that decision, not the exit.)
-run_case "Linux with no known package manager detected as none" Linux x86_64 "" \
+run_case "Linux with no known package manager detected as none" "$LINUX_BOOTSTRAP" Linux x86_64 "" \
   "PKG_MGR=none"
 
 echo
-echo "== 3. Negative cases (OS/arch guard clauses — fire before self-test hook) =="
-run_case "unsupported OS (FreeBSD)" FreeBSD x86_64 "" "" fail
-run_case "unsupported Linux arch (riscv64)" Linux riscv64 "apt-get" "" fail
+echo "== 3. bootstrap-linux.sh negative cases (OS/arch guards) =="
+run_case "unsupported OS (FreeBSD)" "$LINUX_BOOTSTRAP" FreeBSD x86_64 "" "" fail
+run_case "unsupported Linux arch (riscv64)" "$LINUX_BOOTSTRAP" Linux riscv64 "apt-get" "" fail
+run_case "bootstrap-linux.sh refuses to run on Darwin" "$LINUX_BOOTSTRAP" Darwin arm64 "brew" "" fail
+
+echo
+echo "== 4. bootstrap-macos.sh: OS / arch detection =="
+# K8S_OS/K8S_ARCH must resolve correctly on macOS too — this is exactly the
+# shape of bug that shipped once already (an arch mapping silently missing
+# the macOS/arm64 case), so assert it explicitly rather than just tolerating
+# it. Homebrew is always PKG_MGR here, regardless of what else is on PATH.
+run_case "macos-arm64 (brew)"       "$MACOS_BOOTSTRAP" Darwin arm64   "brew" \
+  "OS_NAME=Darwin ARCH=arm64 PKG_MGR=brew K8S_OS=darwin K8S_ARCH=arm64"
+
+run_case "macos-x86_64 (brew)"      "$MACOS_BOOTSTRAP" Darwin x86_64  "brew" \
+  "OS_NAME=Darwin ARCH=x86_64 PKG_MGR=brew K8S_OS=darwin K8S_ARCH=amd64"
+
+run_case "macos never needs a Linux pkg mgr even if one is on PATH" \
+  "$MACOS_BOOTSTRAP" Darwin arm64 "apt-get" "PKG_MGR=brew"
+
+echo
+echo "== 5. bootstrap-macos.sh negative cases (OS guard) =="
+run_case "bootstrap-macos.sh refuses to run on Linux" "$MACOS_BOOTSTRAP" Linux x86_64 "apt-get" "" fail
+run_case "bootstrap-macos.sh refuses to run on FreeBSD" "$MACOS_BOOTSTRAP" FreeBSD x86_64 "" "" fail
 
 echo
 echo "============================================================"

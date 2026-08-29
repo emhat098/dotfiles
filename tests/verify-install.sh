@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# tests/verify-install.sh — run *after* a real bootstrap-zsh.sh execution
-# (locally or in CI) to confirm the tools that should be on PATH actually
-# are. This is a smoke test, not a correctness test: it checks presence,
-# not behavior — pairs with tests/test-bootstrap.sh, which checks the
-# OS/arch/package-manager detection logic in isolation without ever
-# actually installing anything.
+# tests/verify-install.sh — run *after* a real bootstrap-linux.sh or
+# bootstrap-macos.sh execution (locally or in CI) to confirm the tools that
+# should be on PATH actually are. This is a smoke test, not a correctness
+# test: it checks presence, not behavior — pairs with
+# tests/test-bootstrap.sh, which checks the OS/arch/package-manager
+# detection logic in isolation without ever actually installing anything.
 #
-# Usage: ~/dotfiles/bootstrap-zsh.sh && ~/dotfiles/tests/verify-install.sh
+# Usage: ~/dotfiles/bootstrap-linux.sh && ~/dotfiles/tests/verify-install.sh
+#    or: ~/dotfiles/bootstrap-macos.sh && ~/dotfiles/tests/verify-install.sh
 
 set -uo pipefail
 
