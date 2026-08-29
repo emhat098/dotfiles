@@ -1,7 +1,7 @@
 name: test
 
 # Runs the actual installs, not just the detection-logic unit tests — every
-# job here executes real bootstrap-zsh.sh steps on a real platform. Triggers
+# job here executes real bootstrap-linux.sh or bootstrap-macos.sh steps on a real platform. Triggers
 # on push/PR (so regressions are caught before merge) and weekly (so
 # upstream drift — a renamed Homebrew formula, a changed GitHub release
 # asset convention — gets caught even with zero new commits).
@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck -x bootstrap-zsh.sh tests/test-bootstrap.sh tests/verify-install.sh
+          shellcheck -x bootstrap-common.sh bootstrap-linux.sh bootstrap-macos.sh tests/test-bootstrap.sh tests/verify-install.sh
 
   unit-tests:
     # Detection-logic matrix only — no sudo, no network installs. Fast, so
@@ -42,8 +42,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Run bootstrap-zsh.sh end-to-end
-        run: ./bootstrap-zsh.sh
+      - name: Run bootstrap-linux.sh end-to-end
+        run: ./bootstrap-linux.sh
       - name: Verify installed tools
         run: ./tests/verify-install.sh
 
@@ -54,8 +54,8 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Run bootstrap-zsh.sh end-to-end
-        run: ./bootstrap-zsh.sh
+      - name: Run bootstrap-macos.sh end-to-end
+        run: ./bootstrap-macos.sh
       - name: Verify installed tools
         run: ./tests/verify-install.sh
 
@@ -85,8 +85,8 @@ jobs:
           useradd -m -s /bin/bash tester
           echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
           chown -R tester:tester "$GITHUB_WORKSPACE"
-      - name: Run bootstrap-zsh.sh end-to-end as non-root
-        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Run bootstrap-linux.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-linux.sh"
       - name: Verify installed tools
         run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"
 
@@ -107,8 +107,8 @@ jobs:
           useradd -m -s /bin/bash tester
           echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
           chown -R tester:tester "$GITHUB_WORKSPACE"
-      - name: Run bootstrap-zsh.sh end-to-end as non-root
-        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Run bootstrap-linux.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-linux.sh"
       - name: Verify installed tools
         run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"
 
@@ -129,7 +129,7 @@ jobs:
           useradd -m -s /bin/bash tester
           echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
           chown -R tester:tester "$GITHUB_WORKSPACE"
-      - name: Run bootstrap-zsh.sh end-to-end as non-root
-        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-zsh.sh"
+      - name: Run bootstrap-linux.sh end-to-end as non-root
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && GITHUB_TOKEN='$GITHUB_TOKEN' ./bootstrap-linux.sh"
       - name: Verify installed tools
         run: su tester -c "export PATH=\$HOME/.local/bin:\$PATH; cd '$GITHUB_WORKSPACE' && ./tests/verify-install.sh"
